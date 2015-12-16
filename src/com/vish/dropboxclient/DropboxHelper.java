@@ -1,34 +1,18 @@
 package com.vish.dropboxclient;
-//Include the Dropbox SDK.
 import com.dropbox.core.*;
 
 import java.io.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
-//import jdk.nashorn.internal.runtime.regexp.joni.exception.SyntaxException;
 
 
-/**
- * A simple Dropbox client built for the purpose of retrieving the latest file from a folder.<p>
- * Uses the Dropbox Java Core API:
- * https://www.dropbox.com/developers-v1/core/start/java
- * @version 1.0 - 2015-11-05 initial version, downloads latest file. <br>
- * 1.1 - 2015-12-16<br>
- * - added ability to upload to a folder<br> 
- * - Authorization Token can now be regenerated. This is needed for flexibility (e.g to link to a different Dropbox account). <br>
- * @author vish
- *
- */
 public class DropboxHelper {
 
 	/** location of the access token that links a dropbox account with the app */
