@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="jar" name="Create DropboxClient JAR">
+	<property name="debuglevel" value="source,lines,vars" />
+	<property name="target" value="1.7" />
+	<property name="source" value="1.7" />
+	<property name="srcdir" value="src" />
+	<property name="bindir" value="bin" />
+	<property name="source" value="1.7" />
+	<property name="dropboxsdk" value="./dropbox-java-sdk-1.7.7"/>
+
+	<path id="DropboxClient.classpath">
+		<pathelement location="bin" />
+		<pathelement location="lib" />
+		<pathelement location="${dropboxsdk}/lib/" />
+		<pathelement location="${dropboxsdk}/lib/dropbox-core-sdk-1.7.7.jar" />
+		<pathelement location="${dropboxsdk}/lib/jackson-core-2.2.4.jar" />
+	</path>
+	<!-- INIT TASK : INITIALIZE EVERYTHING -->
+	<target name="init">
+		<echo message="Initializing ..." />
+		<mkdir dir="${bindir}" />
+	</target>
+
+	<target depends="init" name="build" description="Build DropboxClient classes">
+		<echo message="Project: ${ant.project.name}" />
+		<echo>BuildFile: ${ant.file}</echo>
+		<javac debug="true" debuglevel="${debuglevel}" srcdir="${srcdir}"
+			destdir="${bindir}" includeantruntime="false" source="${source}"
+			target="${target}" listfiles="yes">
+			<include name="**/*.java" />
+			<classpath refid="DropboxClient.classpath" />
+		</javac>
+	</target>
+
+    <!--this file was created by Eclipse Runnable JAR Export Wizard-->
+    <!--ANT 1.7 is required                                        -->
+    <target name="jar" depends="build" description="Create Runnable DropboxClient JAR">
+        <jar destfile="${user.dir}/DropboxClient.jar">
+            <manifest>
+                <attribute name="Main-Class" value="org.eclipse.jdt.internal.jarinjarloader.JarRsrcLoader"/>
+                <attribute name="Rsrc-Main-Class" value="com.vish.dropboxclient.DropboxHelper"/>
+                <attribute name="Class-Path" value="."/>
+                <attribute name="Rsrc-Class-Path" value="./ dropbox-core-sdk-1.7.7.jar jackson-core-2.2.4.jar"/>
+            </manifest>
+            <zipfileset src="jar-in-jar-loader.zip"/>
+            <fileset dir="${user.dir}/bin"/>
+            <zipfileset dir="${user.dir}/dropbox-java-sdk-1.7.7\lib" includes="dropbox-core-sdk-1.7.7.jar"/>
+            <zipfileset dir="${user.dir}/dropbox-java-sdk-1.7.7\lib" includes="jackson-core-2.2.4.jar"/>
+        </jar>
+    </target>
+</project>
