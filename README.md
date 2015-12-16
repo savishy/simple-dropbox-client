@@ -1,6 +1,6 @@
 # simple-dropbox-client
 A simple Dropbox client I built for my own use. Works great when run as part of automated tasks (e.g. Jenkins). 
-
+Requires you to have a Dropbox Developer account (available for free) and a Dropbox App. 
 ## Introduction
 
 This tool allows you to programmatically interact with a Dropbox account, e.g. 
@@ -14,6 +14,10 @@ This tool allows you to programmatically interact with a Dropbox account, e.g.
 * This tool uses the [Dropbox Java Core API](https://www.dropbox.com/developers-v1/core/start/java). The core libraries are already packaged into the repo. 
 * This is an Eclipse project, so you can import it into Eclipse as File > Import > Existing Projects into Workspace.
 * You will need ant if you want to build from the command-line.
+* This tool depends on a dropbox.properties in `pwd` with the following properties. 
+
+	APP_KEY=Dropbox App Key
+	APP_SECRET=Dropbox App Secret
 
 ## Syntax
 
