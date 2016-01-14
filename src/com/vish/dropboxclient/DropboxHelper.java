@@ -253,7 +253,7 @@ public class DropboxHelper {
 			getFile(getLatestFile(), client);
 			break;
 		case uploadandshare:
-			String uploadedFilePath = uploadFile(client,"/builds/crunchcam/android");
+			String uploadedFilePath = uploadFile(client,targetDir);
 			String shareURL = getShareLink(client,uploadedFilePath);
 			System.out.println(shareURL);
 			break;
