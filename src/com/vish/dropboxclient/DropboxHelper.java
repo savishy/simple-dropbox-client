@@ -7,6 +7,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
@@ -41,8 +42,13 @@ public class DropboxHelper {
 			BufferedReader bf = new BufferedReader(new FileReader(f));
 			String line = null;
 			while ((line = bf.readLine()) != null) {
-				code = line;
-				System.out.println("found code " + code);
+				//ignore empty lines if any
+				if (line.trim().length() == 0) continue;
+				else {
+					code = line.trim();
+					System.out.println("found code : " + code + " with length: " + code.length());
+					break;					
+				}
 			}
 			bf.close();			
 		} else 
@@ -314,6 +320,32 @@ public class DropboxHelper {
 		};
 	}
 	
+	private static String promptForAccessToken(DbxRequestConfig config,DbxAppInfo appInfo) throws Exception {
+		/**
+		 * ask user to visit a Dropbox URL and Login as the "Target" account
+		 * (IE the account from which we want to retrieve data)
+		 * this retrieves the access token 
+		 */
+
+		DbxWebAuthNoRedirect webAuth = new DbxWebAuthNoRedirect(config, appInfo);
+		String authorizeUrl = webAuth.start();
+
+		System.out.println("1. Go to: " + authorizeUrl);
+		System.out.println("2. Click \"Allow\" (you might have to log in first)");
+		System.out.println("3. Copy the authorization code.");
+		String code = new BufferedReader(new InputStreamReader(System.in)).readLine().trim();			
+		DbxAuthFinish authFinish = webAuth.finish(code);
+		String accessToken = authFinish.accessToken;
+		/** store the token in file for future calls */
+		File codeFile = new File(accessTokenPath);
+		BufferedWriter bw = new BufferedWriter(new FileWriter(codeFile));
+		System.out.println("Storing token : " + accessToken + " with length : " + accessToken.length() + " in file " + accessTokenPath + " for future use...");
+		bw.write(accessToken);
+		bw.flush();
+		bw.close();	
+		return accessToken;
+	}
+	
 	/**
 	 * @param args
 	 * @throws ParseException 
@@ -332,8 +364,6 @@ public class DropboxHelper {
 
 		DbxRequestConfig config = new DbxRequestConfig(
 				"JavaTutorial/1.0", Locale.getDefault().toString());
-		DbxWebAuthNoRedirect webAuth = new DbxWebAuthNoRedirect(config, appInfo);
-		String authorizeUrl = webAuth.start();
 
 		/**
 		 * try to retrieve access token from file. if not found, retrieve  
@@ -341,32 +371,17 @@ public class DropboxHelper {
 		 */
 		String accessToken;
 		if ((accessToken = retrieveAccessTokenFromFile()) == null) {
-
-			/**
-			 * ask user to visit a Dropbox URL and Login as the "Target" account
-			 * (IE the account from which we want to retrieve data)
-			 * this retrieves the access token 
-			 */
-
-			System.out.println("1. Go to: " + authorizeUrl);
-			System.out.println("2. Click \"Allow\" (you might have to log in first)");
-			System.out.println("3. Copy the authorization code.");
-			String code = new BufferedReader(new InputStreamReader(System.in)).readLine().trim();			
-			DbxAuthFinish authFinish = webAuth.finish(code);
-			accessToken = authFinish.accessToken;
-			/** store the token in file for future calls */
-			File codeFile = new File(accessTokenPath);
-			BufferedWriter bw = new BufferedWriter(new FileWriter(codeFile));
-			System.out.println("Storing token in file " + accessTokenPath + " for future use...");
-			bw.write(accessToken);
-			bw.flush();
-			bw.close();	
-
+			accessToken = promptForAccessToken(config, appInfo);
 		}
 
 		DbxClient client = new DbxClient(config, accessToken);
-		System.out.println("Linked account: " + client.getAccountInfo().displayName);
-
+		try {
+			System.out.println("Linked account: " + client.getAccountInfo().displayName);
+		} catch (DbxException e) {
+			System.err.println(e.getMessage());
+			System.out.println("error using existing token: " + accessToken + " request new token...");
+			accessToken = promptForAccessToken(config, appInfo);
+		}
 		if (fileName == null)		
 			doDropboxAction(client,"latest");
 		else {
