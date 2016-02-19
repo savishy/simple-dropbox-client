@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 
 public class DropboxHelper {
-
+	private static boolean DEBUG = false;
 	/** location of the access token that links a dropbox account with the app */
 	private static String accessTokenPath = System.getProperty("user.dir") + File.separator + "DbxAuthToken.txt";
 
@@ -28,7 +28,7 @@ public class DropboxHelper {
 	/** action to perform */
 	private static actions action;
 	private static HashMap<String,Date> fileModificationDates = new HashMap<String,Date>();
-
+	private static int MAX_FILES_TO_DELETE  = 5;
 	/**
 	 * try to retrieve previous access token from file
 	 * if present, return access token. if absent, return null
@@ -84,14 +84,14 @@ public class DropboxHelper {
 			java.util.regex.Matcher matcher = pattern.matcher(metadataSplit);
 			if (matcher.find(0)) {
 				rawValue = matcher.group(1);
-				System.out.println("match group 1: " + rawValue);
+				if (DEBUG) System.out.println("match group 1: " + rawValue);
 				break;
 			} 
 		}
 		if(toFind.equals("lastModified")) {
 			SimpleDateFormat dateformat = new SimpleDateFormat("yyyy/MM/dd hh:mm:ss z");
 			Date date = dateformat.parse(rawValue);
-			System.out.println("parsed date:" + date);
+			if (DEBUG) System.out.println("parsed lastModifiedDate:" + date);
 			return date;
 		} else {
 			return null;
@@ -124,17 +124,27 @@ public class DropboxHelper {
 	}
 	
 	/**
-	 * Retrieve metadata from dropbox files.<p>
+	 * Retrieve metadata from dropbox files in {@link #targetDir}.<p>
 	 * Populates a hashmap {@link #fileModificationDates} with key = filename, value = String[] containing metadata
+	 * <p>
+	 * If the hashmap has prior entries, they will be cleared and repopulated. This means we can use this method to always 
+	 * store the latest information in {@link #fileModificationDates}.
 	 * @param client
+	 * @param verbose set to true to print detailed metadata about each file.
 	 * @throws IOException
 	 * @throws DbxException
 	 * 
 	 */
-	private static void getFileMetadata(DbxClient client, boolean verbose) throws IOException, DbxException, ParseException {
+	private static void updateFileMetadata(DbxClient client, boolean verbose) throws IOException, DbxException, ParseException {
+		//if hashmap has entries, delete them
+		if (fileModificationDates.size() > 0) {
+			System.out.println("updating file metadata ...");
+			fileModificationDates.clear();
+		} 
+		
 		DbxEntry.WithChildren listing = client.getMetadataWithChildren(targetDir);
-		if (verbose) System.out.println("Files in the path " + targetDir + ":");
 		if (listing == null) throw new IOException(targetDir + " is possibly empty!");
+		System.out.println("Path " + targetDir + ": " + listing.children.size() + " files");
 		for (DbxEntry child : listing.children) {
 			if (verbose) System.out.println("	" + child.name + ": " + child.toString());
 			fileModificationDates.put(child.name, getModificationDate(child.toString(),"lastModified"));
@@ -179,17 +189,20 @@ public class DropboxHelper {
 						"ARG3: optional. Provide the exact filename that you want to download. Defaults to downloading whatever is the latest file in ARG2.\n" +
 				"--------------------------------------------------\n" + 
 				"ACTIONS:\n" +
-				"listfiles: list files and folders in a path. can be used to browse your dropbox folder-structure.\n" +
-				"listdetails: its like ls -l for Dropbox. List files and lots of additional details. Warning: VERBOSE output!\n" +
-				"download: download a file\n" +
-				"uploadandshare: upload a file to Dropbox and get a shareable URL to it.\n" +
-				"deleteoldestfiles: manage free-space on your Dropbox folder by deleting N oldest files.\n" +
-				"Examples: \n" + 
+				"- listfiles: list files and folders in a path. can be used to browse your dropbox folder-structure.\n" +
+				"- listdetails: its like ls -l for Dropbox. List files and lots of additional details. Warning: VERBOSE output!\n" +
+				"- download: download a file\n" +
+				"- uploadandshare: upload a file to Dropbox and get a shareable URL to it.\n" +
+				"- deleteoldestfiles: manage free-space on your Dropbox folder by deleting the " + MAX_FILES_TO_DELETE + " oldest files.\n" +
+				"this option will recursively delete files until " +MAX_FILES_TO_DELETE + " files are deleted  or " + MAX_FILES_TO_DELETE +
+				"\nfiles remain, whichever comes first.\n" +
+				"\n" + 
+				"EXAMPLES: \n" + 
 				"List filenames and foldernames in path /a/b/c/d: java -jar DropboxClient.jar listfiles /a/b/c/d\n" + 
 				"List filenames with details in /a/b/c/d: java -jar DropboxClient.jar listdetails /a/b/c/d\n" + 
 				"Download a file: java -jar DropboxClient.jar download file.exe\n" +
 				"Upload a file and get a shareable URL to it: java -jar DropboxClient.jar uploadandshare /a/b/c/d file.exe\n" +
-				"delete N oldest files from a folder: java -jar DropboxClient.jar deleteoldestfiles\n"
+				"delete " +MAX_FILES_TO_DELETE + " oldest files from a folder: java -jar DropboxClient.jar deleteoldestfiles /a/b/c/d\n"
 				);
 	}
 
@@ -219,37 +232,82 @@ public class DropboxHelper {
 	}
 
 	/**
-	 * iterate over the {@link #fileModificationDates} hashmap and find out which file is the latest.
+	 * iterate over the {@link #fileModificationDates} hashmap and find out which file is at the extremity
+	 * (i.e which is the oldest or newest file based on argument).
 	 * <p>
-	 * The hashmap should already be populated, using the call to {@link #getFileMetadata(DbxClient, boolean)}
-	 * @return
+	 * The hashmap should already be populated, using the call to {@link #updateFileMetadata(DbxClient, boolean)}
+	 * @param what "oldest" or "newest".
+	 * @return filename
 	 * @throws IOException
 	 * @throws DbxException
 	 * @throws ParseException
 	 */
-	private static String getLatestFile() throws IOException, DbxException, ParseException {
+	private static String getFileAtExtremity(String what) throws IOException, DbxException, ParseException {
 		Date currentDate = new Date();
-		Date maxDate = new SimpleDateFormat("MMMM d, yyyy").parse("January 1, 1970");
+		Date maxDate = new Date();
+		boolean newest = true;
+		if (what.toLowerCase().trim().equals("newest"))
+			newest = true;
+		else if (what.toLowerCase().trim().equals("oldest"))
+			newest = false;
+		else throw new IOException (what + " is not an option!");
+
+		if (newest) maxDate = new SimpleDateFormat("MMMM d, yyyy").parse("January 1, 1970");
+		else maxDate = new SimpleDateFormat("MMMM d, yyyy").parse("January 1, 2055");
+
 		String latestRelease = null;
 		/** iterate over both the keys and values */
 		for (Map.Entry<String, Date> entry : fileModificationDates.entrySet()) {
 			String currentKey = entry.getKey();
 			currentDate = entry.getValue();
 
-			if (currentDate.after(maxDate)) {
-				maxDate = currentDate;
-				latestRelease = currentKey;
-			}  
-			System.out.println("currentKey:" + currentKey + " currentDate:" + currentDate + " maxDate:" + maxDate);
+			//if finding newest file: 
+			if  (newest) {
+				if (currentDate.after(maxDate)) {
+					maxDate = currentDate;
+					latestRelease = currentKey;
+				}  				
+			} else {
+				if (currentDate.before(maxDate)) {
+					maxDate = currentDate;
+					latestRelease = currentKey;
+				}
+			}
+			if (DEBUG) System.out.println("currentKey:" + currentKey + " currentDate:" + currentDate + " maxDate:" + maxDate);
 		}
-
-
-		System.out.println("Latest File:" + latestRelease + " with modification date:" + maxDate);
+		System.out.println((newest ? "newest" : "oldest" ) + " file:" + latestRelease + " with modification date:" + maxDate);
 		return latestRelease;
 	}
 	
-	private static void deleteOldestFiles() throws Exception {
+	/**
+	 * deletes {@link #MAX_FILES_TO_DELETE} oldest files.
+	 * @param client
+	 * @throws DbxException
+	 * @throws IOException
+	 * @throws ParseException
+	 */
+	private static void deleteOldestFiles(DbxClient client) throws DbxException, IOException, ParseException {
 		
+		int filesDeleted = 0;
+		while (filesDeleted < MAX_FILES_TO_DELETE) {
+			getAccountSpaceUsageInfo(client);
+			updateFileMetadata(client, false);
+			//if at this stage HashMap is empty, bail!
+			if (fileModificationDates == null || fileModificationDates.size() == 0)
+				throw new IOException ("expected file-modification info to be populated, but it was not");
+			//if there are less files than the files we expect to delete, stop
+			if (fileModificationDates.size() < MAX_FILES_TO_DELETE) {
+				System.out.println("dropbox folder has " + fileModificationDates.size() + " files and this option deletes " + 
+						MAX_FILES_TO_DELETE + " files; stopping ");
+				return;
+			}
+			
+			String oldestFile = getFileAtExtremity("oldest");
+			System.out.println("delete " + oldestFile);
+			client.delete(targetDir + "/" + oldestFile);
+			filesDeleted++;
+		}
+
 	}
 	/**
 	 * 
@@ -266,7 +324,7 @@ public class DropboxHelper {
 			listContents(client,true);
 			break;
 		case download:
-			getFileMetadata(client,false);
+			updateFileMetadata(client,false);
 			/** if not getting latest, simply retrieve latest file and return
 			 */
 			if (!which.toLowerCase().equals("latest")) {
@@ -274,7 +332,7 @@ public class DropboxHelper {
 				return;
 			}
 			/** calculate which is the latest file and retrieve it */
-			getFile(getLatestFile(), client);
+			getFile(getFileAtExtremity("newest"), client);
 			break;
 		case uploadandshare:
 			String uploadedFilePath = uploadFile(client,targetDir);
@@ -282,7 +340,7 @@ public class DropboxHelper {
 			System.out.println(shareURL);
 			break;
 		case deleteoldestfiles:
-			deleteOldestFiles();
+			deleteOldestFiles(client);
 			break;
 		default: throw new IOException(action + " not supported");
 		}
@@ -310,6 +368,20 @@ public class DropboxHelper {
 		return path;
 	}
 
+	/**
+	 * get total used/total free space in MB.
+	 * @param client
+	 * @return {@code float[MB Used, MB Total]} 
+	 * @throws DbxException
+	 */
+	private static float[] getAccountSpaceUsageInfo(DbxClient client) throws DbxException { 
+		DbxAccountInfo.Quota quota = client.getAccountInfo().quota;
+		float mbUsed = Math.round((float) (quota.normal + quota.shared) / 1024 / 1024);
+		float mbTotal = Math.round((float) (quota.total / 1024 / 1024));
+		System.out.println("Usage: " + mbUsed + "/" + mbTotal + " MB");
+		return new float[]{mbUsed,mbTotal};
+	}
+	
 	/**
 	 * upload a file to Dropbox folder
 	 * @param client
