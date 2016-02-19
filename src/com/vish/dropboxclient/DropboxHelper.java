@@ -24,7 +24,7 @@ public class DropboxHelper {
 	/** the filename that you need to browse or download */
 	private static String fileName = null;
 	/** all supported actions */
-	private static enum actions { listfiles, listdetails, download, uploadandshare };
+	private static enum actions { listfiles, listdetails, download, uploadandshare, deleteoldestfiles };
 	/** action to perform */
 	private static actions action;
 	private static HashMap<String,Date> fileModificationDates = new HashMap<String,Date>();
@@ -99,6 +99,13 @@ public class DropboxHelper {
 
 	}
 
+	/**
+	 * List contents of a dropbox path. At this point path should have been correctly formatted .
+	 * @param client a {@link DbxClient} object.
+	 * @param withMetadata set this to true to print full details about each file. 
+	 * @throws IOException
+	 * @throws DbxException
+	 */
 	private static void listContents(DbxClient client,boolean withMetadata) throws IOException,DbxException {
 		try {
 			DbxEntry.WithChildren listing = client.getMetadataWithChildren(targetDir);
@@ -171,10 +178,18 @@ public class DropboxHelper {
 						"ARG2: required. Provide a valid directory in the target dropbox account. \n" + 
 						"ARG3: optional. Provide the exact filename that you want to download. Defaults to downloading whatever is the latest file in ARG2.\n" +
 				"--------------------------------------------------\n" + 
+				"ACTIONS:\n" +
+				"listfiles: list files and folders in a path. can be used to browse your dropbox folder-structure.\n" +
+				"listdetails: its like ls -l for Dropbox. List files and lots of additional details. Warning: VERBOSE output!\n" +
+				"download: download a file\n" +
+				"uploadandshare: upload a file to Dropbox and get a shareable URL to it.\n" +
+				"deleteoldestfiles: manage free-space on your Dropbox folder by deleting N oldest files.\n" +
 				"Examples: \n" + 
-				"List filenames in path /a/b/c/d: java -jar DropboxClient.jar listfiles /a/b/c/d\n" + 
+				"List filenames and foldernames in path /a/b/c/d: java -jar DropboxClient.jar listfiles /a/b/c/d\n" + 
 				"List filenames with details in /a/b/c/d: java -jar DropboxClient.jar listdetails /a/b/c/d\n" + 
-				"Upload a file and get a shareable URL to it: java -jar DropboxClient.jar uploadandshare /a/b/c/d file.exe\n"
+				"Download a file: java -jar DropboxClient.jar download file.exe\n" +
+				"Upload a file and get a shareable URL to it: java -jar DropboxClient.jar uploadandshare /a/b/c/d file.exe\n" +
+				"delete N oldest files from a folder: java -jar DropboxClient.jar deleteoldestfiles\n"
 				);
 	}
 
@@ -189,12 +204,12 @@ public class DropboxHelper {
 		case 2:
 			/** [action] [dir] */
 			action = actions.valueOf(args[0]);
-			targetDir = args[1];
+			targetDir = correctedDropboxPath(args[1]);
 			break;
 		case 3:
 			/** [auth token] [action] [dir] [filename] */
 			action = actions.valueOf(args[0]);
-			targetDir = args[1];
+			targetDir = correctedDropboxPath(args[1]);
 			fileName = args[2];
 			break;
 		default:
@@ -233,6 +248,9 @@ public class DropboxHelper {
 		return latestRelease;
 	}
 	
+	private static void deleteOldestFiles() throws Exception {
+		
+	}
 	/**
 	 * 
 	 * @param client
@@ -263,9 +281,33 @@ public class DropboxHelper {
 			String shareURL = getShareLink(client,uploadedFilePath);
 			System.out.println(shareURL);
 			break;
+		case deleteoldestfiles:
+			deleteOldestFiles();
+			break;
 		default: throw new IOException(action + " not supported");
 		}
 		
+	}
+	
+	/**
+	 * Dropbox paths must start with "/".
+	 * Dropbox paths must not end with "/"
+	 * This method corrects bad Dropbox paths. (See issue https://github.com/savishy/simple-dropbox-client/issues/3)
+	 * @param path
+	 * @return
+	 */
+	private static String correctedDropboxPath(String path) {
+		if (!path.startsWith("/")) {
+			System.out.println("WARN: path " + path + " does not start with /, we corrected it.");
+			path = "/" + path;			
+		}
+		while (path.endsWith("/")) {
+			System.out.println("WARN: path " + path + " ends with /, we corrected it.");
+			path = path.substring(0, path.length()-1);
+			//catch corner case where path is zero-length
+			if (path.length() == 0) { path = "/"; break; }
+		}
+		return path;
 	}
 
 	/**
